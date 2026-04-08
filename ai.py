@@ -1,10 +1,8 @@
 import requests
 import os
-import time
 from dotenv import load_dotenv
 
 load_dotenv()
-
 
 def classify_risk(weather_data):
     total = weather_data["total_rain"]
@@ -19,28 +17,21 @@ def classify_risk(weather_data):
 
 
 def analyze_weather(weather_data):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    try:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
 
-    api_key = os.getenv("GEMINI_API_KEY")
-
-    if not api_key:
-        return {
-            "risk": "ERRO",
-            "analysis": "Chave da API não configurada."
+        params = {
+            "key": os.getenv("GEMINI_API_KEY")
         }
 
-    params = {
-        "key": api_key
-    }
+        risk = classify_risk(weather_data)
 
-    risk = classify_risk(weather_data)
-
-    prompt = f"""
+        prompt = f"""
 Você é o HydraRec, um sistema inteligente de monitoramento de chuvas que atua em parceria com a Defesa Civil do Recife.
 
 Seu papel é analisar dados meteorológicos e orientar a população durante situações de chuva, alagamento e risco.
 
-Você deve agir como um especialista em clima e gestão de riscos urbanos, com foco na cidade do Recife.
+Você deve agir como um especialista em clima e gestão de riscos urbanos, com foco na cidade do Recife, considerando sua vulnerabilidade a alagamentos e deslizamentos.
 
 Regras obrigatórias:
 - NÃO use markdown
@@ -48,76 +39,70 @@ Regras obrigatórias:
 - Escreva em linguagem simples e direta
 - Seja objetivo e claro
 - Fale como um sistema oficial de alerta
+- Evite termos técnicos difíceis
+- Sempre traga orientação prática para a população
+
+Contexto importante:
+- Recife possui áreas de risco com drenagem limitada
+- Chuvas acumuladas aumentam o risco de alagamentos
+- A população precisa de instruções claras e rápidas
 
 Dados atuais:
 Temperatura: {weather_data['temp']} °C
 Chuva atual: {weather_data['rain']} mm
 Umidade: {weather_data['humidity']} %
-Chuva acumulada: {weather_data['total_rain']} mm
-Pico de chuva: {weather_data['max_rain']} mm/h
+Chuva acumulada nas últimas horas: {weather_data['total_rain']} mm
+Pico de intensidade da chuva: {weather_data['max_rain']} mm/h
 Classificação de risco: {risk}
 
-Explique a situação e diga o que a população deve fazer.
+Sua tarefa:
+Explique a situação atual de forma clara e objetiva para a população do Recife.
+Informe o nível de risco e o que as pessoas devem fazer agora.
+
+Formato da resposta:
+- Comece informando o nível de risco
+- Explique brevemente a situação
+- Dê instruções práticas
+
+Exemplo de tom esperado:
+"Risco médio de alagamento em Recife. A chuva acumulada nas últimas horas aumenta a possibilidade de pontos de alagamento. Evite áreas baixas e fique atento a novos alertas da Defesa Civil."
 """
 
-    body = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
-    }
-
-    # 🔁 retry automático
-    tentativas = 3
-
-    for tentativa in range(tentativas):
-        try:
-            response = requests.post(
-                url,
-                params=params,
-                json=body,
-                timeout=10  # evita travar
-            )
-
-            data = response.json()
-
-            # 🚨 erro da API
-            if "error" in data:
-                erro_msg = str(data["error"])
-
-                # retry se for 503 (sobrecarga)
-                if "503" in erro_msg or "UNAVAILABLE" in erro_msg:
-                    print(f"Tentativa {tentativa + 1} falhou (503)...")
-                    time.sleep(2)
-                    continue
-
-                return {
-                    "risk": "ERRO",
-                    "analysis": f"Erro da API: {data['error']}"
+        body = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt}
+                    ]
                 }
+            ]
+        }
 
-            # ✅ sucesso
-            if "candidates" in data:
-                return {
-                    "risk": risk,
-                    "analysis": data["candidates"][0]["content"]["parts"][0]["text"]
-                }
+        response = requests.post(url, params=params, json=body)
+        data = response.json()
 
-        except requests.exceptions.Timeout:
-            print(f"Timeout na tentativa {tentativa + 1}")
-            time.sleep(2)
-
-        except Exception as e:
+        # 🔍 DEBUG (pode remover depois)
+        if "error" in data:
             return {
                 "risk": "ERRO",
-                "analysis": f"Erro inesperado: {str(e)}"
+                "analysis": f"Erro da API: {data['error']}"
             }
 
-    # ⚠️ fallback final
-    return {
-        "risk": risk,
-        "analysis": "Sistema temporariamente indisponível devido à alta demanda. Tente novamente em instantes."
-    }
+        # ✅ resposta correta
+        if "candidates" in data:
+            return {
+                "risk": risk,
+                "analysis": data["candidates"][0]["content"]["parts"][0]["text"]
+            }
+
+        # ⚠️ fallback
+        return {
+            "risk": risk,
+            "analysis": "Não foi possível gerar análise no momento."
+        }
+
+    except Exception as e:
+        return {
+            "risk": "ERRO",
+            "analysis": f"Erro ao analisar dados: {str(e)}"
+        }
