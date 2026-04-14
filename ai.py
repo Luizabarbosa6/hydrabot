@@ -26,28 +26,29 @@ def analyze_weather(weather_data):
 
         risk = classify_risk(weather_data)
 
+        bairro = weather_data.get("bairro", "um bairro do Recife")
+
         prompt = f"""
 Você é o HydraRec, um sistema inteligente de monitoramento de chuvas que atua em parceria com a Defesa Civil do Recife.
 
-Seu papel é analisar dados meteorológicos e orientar a população durante situações de chuva, alagamento e risco.
-
-Você deve agir como um especialista em clima e gestão de riscos urbanos, com foco na cidade do Recife, considerando sua vulnerabilidade a alagamentos e deslizamentos.
+Seu papel é analisar dados meteorológicos e orientar a população durante situações de chuva, alagamento e risco, de forma clara, humana e responsável.
 
 Regras obrigatórias:
 - NÃO use markdown
 - NÃO use formatação com asteriscos, hashtags ou listas
-- Escreva em linguagem simples e direta
-- Seja objetivo e claro
-- Fale como um sistema oficial de alerta
+- Escreva em linguagem simples, natural e fácil de entender
+- Fale de forma próxima da população, como um alerta oficial que se preocupa com as pessoas
+- Sempre mencione o nome do bairro analisado
 - Evite termos técnicos difíceis
-- Sempre traga orientação prática para a população
+- Seja mais explicativo, não responda de forma curta
 
 Contexto importante:
-- Recife possui áreas de risco com drenagem limitada
-- Chuvas acumuladas aumentam o risco de alagamentos
-- A população precisa de instruções claras e rápidas
+- Recife possui áreas com histórico de alagamentos
+- Chuvas acumuladas aumentam o risco de enchentes e transtornos
+- Muitas pessoas dependem dessa informação para tomar decisões rápidas
 
-Dados atuais:
+Dados atuais para o bairro {bairro}:
+
 Temperatura: {weather_data['temp']} °C
 Chuva atual: {weather_data['rain']} mm
 Umidade: {weather_data['humidity']} %
@@ -56,16 +57,17 @@ Pico de intensidade da chuva: {weather_data['max_rain']} mm/h
 Classificação de risco: {risk}
 
 Sua tarefa:
-Explique a situação atual de forma clara e objetiva para a população do Recife.
-Informe o nível de risco e o que as pessoas devem fazer agora.
+Explique de forma mais detalhada como está a situação atual no bairro {bairro}, ajudando qualquer pessoa a entender o que está acontecendo com o clima neste momento.
 
-Formato da resposta:
-- Comece informando o nível de risco
-- Explique brevemente a situação
-- Dê instruções práticas
+Depois disso:
+- Deixe claro o nível de risco
+- Explique o que esse risco significa na prática
+- Oriente a população com recomendações úteis para esse cenário
 
-Exemplo de tom esperado:
-"Risco médio de alagamento em Recife. A chuva acumulada nas últimas horas aumenta a possibilidade de pontos de alagamento. Evite áreas baixas e fique atento a novos alertas da Defesa Civil."
+Importante:
+- Escreva em formato de parágrafo corrido
+- A resposta deve ser um pouco mais longa, clara e explicativa
+- Soe humano, mas mantendo a responsabilidade de um sistema oficial
 """
 
         body = {
@@ -81,21 +83,12 @@ Exemplo de tom esperado:
         response = requests.post(url, params=params, json=body)
         data = response.json()
 
-        # 🔍 DEBUG (pode remover depois)
-        if "error" in data:
-            return {
-                "risk": "ERRO",
-                "analysis": f"Erro da API: {data['error']}"
-            }
-
-        # ✅ resposta correta
         if "candidates" in data:
             return {
                 "risk": risk,
                 "analysis": data["candidates"][0]["content"]["parts"][0]["text"]
             }
 
-        # ⚠️ fallback
         return {
             "risk": risk,
             "analysis": "Não foi possível gerar análise no momento."
@@ -104,5 +97,5 @@ Exemplo de tom esperado:
     except Exception as e:
         return {
             "risk": "ERRO",
-            "analysis": f"Erro ao analisar dados: {str(e)}"
+            "analysis": str(e)
         }

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from weather import get_weather
@@ -6,10 +6,10 @@ from ai import analyze_weather, classify_risk
 
 app = FastAPI()
 
-# 🔓 CORS (liberado para desenvolvimento)
+# 🔓 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # depois pode restringir
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,44 +19,35 @@ app.add_middleware(
 def home():
     return {"message": "HydraRec API funcionando"}
 
-@app.get("/alerta")
-def alerta():
-    try:
-        # 🌧️ pegar clima
-        weather = get_weather()
 
-        if not weather:
+@app.get("/alerta")
+def alerta(bairro: str = Query(..., description="Nome do bairro do Recife")):
+    try:
+        # 🌧️ buscar clima
+        weather = get_weather(bairro)
+
+        if "error" in weather:
             return {
                 "weather": None,
                 "analysis": {
                     "risk": "ERRO",
-                    "analysis": "Erro ao obter dados meteorológicos."
+                    "analysis": weather["error"]
                 }
             }
 
-        # 🧠 risco básico (sem IA)
+        # 🧠 classificação básica (backup)
         risk = classify_risk(weather)
 
-        # ⚡ evita gastar API à toa
-        if risk == "BAIXO":
-            return {
-                "weather": weather,
-                "analysis": {
-                    "risk": "BAIXO",
-                    "analysis": "Risco baixo de alagamento no momento. Situação estável."
-                }
-            }
-
-        # 🤖 chama IA só quando necessário
+        # 🤖 SEMPRE chama a IA
         analysis = analyze_weather(weather)
 
         # 🔥 fallback se IA falhar
-        if analysis.get("risk") == "ERRO":
+        if not analysis or analysis.get("risk") == "ERRO":
             return {
                 "weather": weather,
                 "analysis": {
                     "risk": risk,
-                    "analysis": f"Risco {risk.lower()} de alagamento no Recife. Fique atento às condições climáticas."
+                    "analysis": f"O bairro {bairro} apresenta risco {risk.lower()} de alagamento no momento. As condições climáticas indicam atenção, principalmente em áreas com histórico de acúmulo de água. Recomenda-se evitar locais propensos a alagamentos e acompanhar novas atualizações."
                 }
             }
 
@@ -66,7 +57,6 @@ def alerta():
         }
 
     except Exception as e:
-        # 💣 nunca deixa quebrar (resolve CORS falso)
         return {
             "weather": None,
             "analysis": {
